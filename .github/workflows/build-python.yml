@@ -1,0 +1,229 @@
+name: Build CPython Archives
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - versions.yml
+      - scripts/**
+      - .github/workflows/build-python.yml
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: python-builds-latest
+
+jobs:
+  matrix:
+    name: Build Matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate matrix from versions.yml
+        id: matrix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          versions = []
+          targets = []
+          section = None
+          current_target = None
+
+          def clean_scalar(value):
+              value = value.strip()
+              if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                  return value[1:-1]
+              return value
+
+          for raw_line in Path("versions.yml").read_text(encoding="utf-8").splitlines():
+              line = raw_line.split("#", 1)[0].rstrip()
+              if not line.strip():
+                  continue
+
+              section_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*$", line)
+              if section_match:
+                  if current_target:
+                      targets.append(current_target)
+                      current_target = None
+                  section = section_match.group(1)
+                  continue
+
+              if section == "versions":
+                  stripped = line.strip()
+                  if stripped.startswith("-"):
+                      versions.append(clean_scalar(stripped[1:]))
+                      continue
+
+              if section == "targets":
+                  target_match = re.match(r"^\s*-\s*id:\s*(.+?)\s*$", line)
+                  if target_match:
+                      if current_target:
+                          targets.append(current_target)
+                      current_target = {"id": clean_scalar(target_match.group(1))}
+                      continue
+
+                  runner_match = re.match(r"^\s*runner:\s*(.+?)\s*$", line)
+                  if runner_match and current_target is not None:
+                      current_target["runner"] = clean_scalar(runner_match.group(1))
+                      continue
+
+              raise SystemExit(f"unsupported versions.yml line: {raw_line}")
+
+          if current_target:
+              targets.append(current_target)
+
+          if not versions:
+              raise SystemExit("versions.yml must declare at least one version")
+          if not targets:
+              raise SystemExit("versions.yml must declare at least one target")
+
+          include = []
+          for version in versions:
+              for target in targets:
+                  if "id" not in target or "runner" not in target:
+                      raise SystemExit(f"target is missing id or runner: {target}")
+                  include.append(
+                      {
+                          "python_version": version,
+                          "target_id": target["id"],
+                          "runner": target["runner"],
+                      }
+                  )
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps({'include': include})}\n")
+          PY
+
+  build:
+    name: Build ${{ matrix.python_version }} / ${{ matrix.target_id }}
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    env:
+      PYENV_ROOT: ${{ runner.temp }}/pyenv
+      PYTHON_VERSION: ${{ matrix.python_version }}
+      TARGET_ID: ${{ matrix.target_id }}
+      TARGET_RUNNER: ${{ matrix.runner }}
+      OUTPUT_DIR: dist
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            libbz2-dev \
+            libffi-dev \
+            liblzma-dev \
+            libncursesw5-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            libssl-dev \
+            llvm \
+            make \
+            tk-dev \
+            uuid-dev \
+            wget \
+            xz-utils \
+            zlib1g-dev
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install bzip2 openssl@3 readline sqlite3 tcl-tk xz zlib
+          {
+            echo "CPPFLAGS=-I$(brew --prefix bzip2)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix readline)/include -I$(brew --prefix sqlite3)/include -I$(brew --prefix xz)/include -I$(brew --prefix zlib)/include"
+            echo "LDFLAGS=-L$(brew --prefix bzip2)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix readline)/lib -L$(brew --prefix sqlite3)/lib -L$(brew --prefix xz)/lib -L$(brew --prefix zlib)/lib"
+            echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix readline)/lib/pkgconfig:$(brew --prefix sqlite3)/lib/pkgconfig:$(brew --prefix xz)/lib/pkgconfig:$(brew --prefix zlib)/lib/pkgconfig"
+            echo "PYTHON_CONFIGURE_OPTS=--with-openssl=$(brew --prefix openssl@3)"
+          } >> "$GITHUB_ENV"
+
+      - name: Install pyenv
+        shell: bash
+        run: |
+          if [[ ! -d "$PYENV_ROOT/.git" ]]; then
+            git clone --depth 1 https://github.com/pyenv/pyenv.git "$PYENV_ROOT"
+          fi
+          echo "$PYENV_ROOT/bin" >> "$GITHUB_PATH"
+          echo "$PYENV_ROOT/plugins/python-build/bin" >> "$GITHUB_PATH"
+
+      - name: Build and validate Python
+        shell: bash
+        run: scripts/build-python.sh
+
+      - name: Package Python archive
+        shell: bash
+        run: scripts/package-python.sh
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpython-${{ matrix.python_version }}-${{ matrix.target_id }}
+          path: |
+            dist/cpython-${{ matrix.python_version }}-${{ matrix.target_id }}.tar.gz
+            dist/cpython-${{ matrix.python_version }}-${{ matrix.target_id }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish Release Assets
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate manifest
+        shell: bash
+        run: |
+          python3 scripts/generate-manifest.py \
+            --artifacts-dir artifacts \
+            --repo "${{ github.repository }}" \
+            --release-tag "$RELEASE_TAG" \
+            --output artifacts/manifest.json
+          python3 -m json.tool artifacts/manifest.json >/dev/null
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: G-Cubed CPython Builds (latest)
+          body: |
+            MSG-managed CPython archives for G-Cubed devcontainers.
+
+            This release is intentionally updated in place by the build workflow.
+            Runtime tools should consume manifest.json and verify sha256 files.
+          files: |
+            artifacts/cpython-*.tar.gz
+            artifacts/cpython-*.sha256
+            artifacts/manifest.json
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true

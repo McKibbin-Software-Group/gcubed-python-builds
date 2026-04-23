@@ -1,0 +1,5 @@
+dist/
+artifacts/
+__pycache__/
+*.tmp
+.DS_Store

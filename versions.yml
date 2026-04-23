@@ -1,0 +1,8 @@
+versions:
+  - "3.13.11"
+
+targets:
+  - id: linux-x86_64-glibc
+    runner: ubuntu-22.04
+  - id: macos-arm64
+    runner: macos-14
