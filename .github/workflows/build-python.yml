@@ -26,6 +26,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Validate scripts
+        shell: bash
+        run: |
+          bash -n scripts/build-python.sh
+          bash -n scripts/package-python.sh
+          python3 -m py_compile scripts/generate-manifest.py scripts/test-generate-manifest.py
+          python3 scripts/test-generate-manifest.py
+
       - name: Generate matrix from versions.yml
         id: matrix
         shell: bash
@@ -140,6 +148,7 @@ jobs:
             libssl-dev \
             llvm \
             make \
+            patchelf \
             tk-dev \
             uuid-dev \
             wget \

@@ -6,9 +6,11 @@ source releases, then publishes the resulting pyenv-style installs as GitHub
 Release assets.
 
 Runtime environments do not need `pyenv`. They download `manifest.json`, choose
-an archive, verify its sha256, extract it under
-`/opt/gcubed/python-builds/pyenv`, validate the Python executable, and pass the
-absolute interpreter path to tools such as `uv venv --python`.
+an archive, verify its sha256, extract it under their chosen install root,
+validate the Python executable, and pass the absolute interpreter path to tools
+such as `uv venv --python`. Archives are built to be relocatable so consumers
+can extract them under paths such as `~/.gcubed` or a temporary staging
+directory.
 
 ## Release Tag
 
@@ -96,11 +98,14 @@ versions/<python-version>/include/...
 versions/<python-version>/build-info.json
 ```
 
-The intended extraction root is:
+The manifest includes this default install root:
 
 ```text
 /opt/gcubed/python-builds/pyenv
 ```
+
+Consumers may choose a different root. The archive paths and manifest `python`
+field are relative to the chosen extraction root.
 
 ## Consuming The Manifest
 
@@ -110,9 +115,16 @@ Runtime tooling should:
 2. Select an entry matching the requested `version` and `platform`.
 3. Download the entry's `asset_name` from `url`.
 4. Verify the archive using `sha256`.
-5. Extract the archive under `/opt/gcubed/python-builds/pyenv`.
-6. Validate `/opt/gcubed/python-builds/pyenv/<python>` from the manifest entry.
+5. Extract the archive under the consumer's chosen install root.
+6. Validate `<install-root>/<python>` from the manifest entry.
 7. Use that absolute interpreter path with `uv venv --python`.
+
+If a consumer extracts the archive to a temporary location only to create a uv
+environment elsewhere, keep the extracted interpreter available for the duration
+of the uv command and set uv options explicitly for that command. For example,
+`UV_LINK_MODE=copy` avoids package/cache symlinks during package installation,
+but archive relocation is still required so the base interpreter can start from
+the temporary extraction path.
 
 Example manifest entry:
 
@@ -138,7 +150,9 @@ outputs for the same version/platform, and manifest generation overwrites the
 target manifest file.
 
 To run the build scripts locally, install `pyenv` first and provide the same
-environment variables used by CI:
+environment variables used by CI. `PYENV_ROOT` can be any writable build
+location; packaged archives are validated after extraction to a different
+temporary path.
 
 ```sh
 export PYENV_ROOT="$HOME/.pyenv"
