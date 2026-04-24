@@ -1,5 +1,7 @@
 versions:
   - "3.13.11"
+  - "3.13.13"
+  - "3.14.4"
 
 targets:
   - id: linux-x86_64-glibc
