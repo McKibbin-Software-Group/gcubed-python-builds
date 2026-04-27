@@ -43,18 +43,21 @@ cpython-<version>-<platform>.sha256
 manifest.json
 ```
 
-## Initial Matrix
+## Current Matrix
 
-Initial Python version:
+Current Python versions:
 
 ```text
 3.13.11
+3.13.13
+3.14.4
 ```
 
-Initial targets:
+Current targets:
 
 ```text
 linux-x86_64-glibc via ubuntu-22.04
+linux-arm64-glibc via ubuntu-22.04-arm
 macos-arm64 via macos-14
 ```
 
@@ -82,10 +85,14 @@ preferred shape.
 ```yaml
 versions:
   - "3.13.11"
+  - "3.13.13"
+  - "3.14.4"
 
 targets:
   - id: linux-x86_64-glibc
     runner: ubuntu-22.04
+  - id: linux-arm64-glibc
+    runner: ubuntu-22.04-arm
   - id: macos-arm64
     runner: macos-14
 ```
@@ -180,7 +187,8 @@ Document the chosen release tag (`python-builds-latest`) in `README.md`.
 - How to trigger the workflow.
 - What release assets are produced.
 - How consuming runtime code should use `manifest.json`.
-- That Linux archives are glibc builds from `ubuntu-22.04`.
+- That Linux x86_64 archives are glibc builds from `ubuntu-22.04`.
+- That Linux arm64 archives are glibc builds from `ubuntu-22.04-arm`.
 - That macOS ARM archives are built on GitHub `macos-14` runners.
 
 ## Agent Guidance

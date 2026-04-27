@@ -30,21 +30,25 @@ https://github.com/<owner>/<repo>/releases/download/python-builds-latest/cpython
 
 Build targets are declared in `versions.yml`.
 
-Initial Python version:
+Current Python versions:
 
 ```text
 3.13.11
+3.13.13
+3.14.4
 ```
 
-Initial platforms:
+Current platforms:
 
 ```text
 linux-x86_64-glibc
+linux-arm64-glibc
 macos-arm64
 ```
 
-Linux archives are built for glibc on GitHub `ubuntu-22.04` runners. macOS ARM
-archives are built on GitHub `macos-14` runners.
+Linux x86_64 archives are built for glibc on GitHub `ubuntu-22.04` runners.
+Linux arm64 archives are built for glibc on GitHub `ubuntu-22.04-arm`
+runners. macOS ARM archives are built on GitHub `macos-14` runners.
 
 ## Adding A Python Version
 
@@ -53,7 +57,8 @@ Edit `versions.yml` and add a quoted CPython patch version:
 ```yaml
 versions:
   - "3.13.11"
-  - "3.13.12"
+  - "3.13.13"
+  - "3.14.4"
 ```
 
 The workflow builds every version x target combination from the file. CPython
@@ -157,8 +162,8 @@ temporary path.
 ```sh
 export PYENV_ROOT="$HOME/.pyenv"
 export PYTHON_VERSION="3.13.11"
-export TARGET_ID="linux-x86_64-glibc"
-export TARGET_RUNNER="ubuntu-22.04"
+export TARGET_ID="linux-arm64-glibc"
+export TARGET_RUNNER="ubuntu-22.04-arm"
 
 scripts/build-python.sh
 scripts/package-python.sh

@@ -6,5 +6,7 @@ versions:
 targets:
   - id: linux-x86_64-glibc
     runner: ubuntu-22.04
+  - id: linux-arm64-glibc
+    runner: ubuntu-22.04-arm
   - id: macos-arm64
     runner: macos-14
