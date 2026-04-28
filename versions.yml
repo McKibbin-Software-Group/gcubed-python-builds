@@ -6,6 +6,14 @@ versions:
 targets:
   - id: linux-x86_64-glibc
     runner: ubuntu-22.04
+  - id: linux-x86_64-icelake-glibc
+    runner: ubuntu-22.04
+    cpu_target: icelake-server
+    required_cpu_flags: avx512f avx512dq avx512ifma avx512cd avx512bw avx512vl avx512vbmi avx512vbmi2 gfni vaes vpclmulqdq avx512vnni avx512bitalg avx512vpopcntdq
+    cflags: -O3 -march=icelake-server -mtune=icelake-server -fno-semantic-interposition
+    cxxflags: -O3 -march=icelake-server -mtune=icelake-server -fno-semantic-interposition
+    ldflags: -Wl,-O1
+    python_configure_opts: --enable-optimizations --with-lto
   - id: linux-arm64-glibc
     runner: ubuntu-22.04-arm
   - id: macos-arm64

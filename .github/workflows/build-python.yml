@@ -55,6 +55,16 @@ jobs:
                   return value[1:-1]
               return value
 
+          def empty_target_fields():
+              return {
+                  "cpu_target": "",
+                  "required_cpu_flags": "",
+                  "cflags": "",
+                  "cxxflags": "",
+                  "ldflags": "",
+                  "python_configure_opts": "",
+              }
+
           for raw_line in Path("versions.yml").read_text(encoding="utf-8").splitlines():
               line = raw_line.split("#", 1)[0].rstrip()
               if not line.strip():
@@ -79,12 +89,19 @@ jobs:
                   if target_match:
                       if current_target:
                           targets.append(current_target)
-                      current_target = {"id": clean_scalar(target_match.group(1))}
+                      current_target = empty_target_fields() | {
+                          "id": clean_scalar(target_match.group(1))
+                      }
                       continue
 
-                  runner_match = re.match(r"^\s*runner:\s*(.+?)\s*$", line)
-                  if runner_match and current_target is not None:
-                      current_target["runner"] = clean_scalar(runner_match.group(1))
+                  field_match = re.match(
+                      r"^\s*(runner|cpu_target|required_cpu_flags|cflags|cxxflags|ldflags|python_configure_opts):\s*(.*?)\s*$",
+                      line,
+                  )
+                  if field_match and current_target is not None:
+                      current_target[field_match.group(1)] = clean_scalar(
+                          field_match.group(2)
+                      )
                       continue
 
               raise SystemExit(f"unsupported versions.yml line: {raw_line}")
@@ -107,6 +124,12 @@ jobs:
                           "python_version": version,
                           "target_id": target["id"],
                           "runner": target["runner"],
+                          "cpu_target": target["cpu_target"],
+                          "required_cpu_flags": target["required_cpu_flags"],
+                          "cflags": target["cflags"],
+                          "cxxflags": target["cxxflags"],
+                          "ldflags": target["ldflags"],
+                          "python_configure_opts": target["python_configure_opts"],
                       }
                   )
 
@@ -126,6 +149,12 @@ jobs:
       PYTHON_VERSION: ${{ matrix.python_version }}
       TARGET_ID: ${{ matrix.target_id }}
       TARGET_RUNNER: ${{ matrix.runner }}
+      TARGET_CPU_TARGET: ${{ matrix.cpu_target }}
+      TARGET_REQUIRED_CPU_FLAGS: ${{ matrix.required_cpu_flags }}
+      TARGET_CFLAGS: ${{ matrix.cflags }}
+      TARGET_CXXFLAGS: ${{ matrix.cxxflags }}
+      TARGET_LDFLAGS: ${{ matrix.ldflags }}
+      TARGET_PYTHON_CONFIGURE_OPTS: ${{ matrix.python_configure_opts }}
       OUTPUT_DIR: dist
     steps:
       - name: Check out repository

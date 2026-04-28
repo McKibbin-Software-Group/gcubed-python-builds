@@ -5,11 +5,87 @@ PYTHON_VERSION="${PYTHON_VERSION:?PYTHON_VERSION is required}"
 TARGET_ID="${TARGET_ID:?TARGET_ID is required}"
 TARGET_RUNNER="${TARGET_RUNNER:-${RUNNER_NAME:-unknown}}"
 PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+TARGET_CPU_TARGET="${TARGET_CPU_TARGET:-}"
+TARGET_REQUIRED_CPU_FLAGS="${TARGET_REQUIRED_CPU_FLAGS:-}"
+TARGET_CFLAGS="${TARGET_CFLAGS:-}"
+TARGET_CXXFLAGS="${TARGET_CXXFLAGS:-}"
+TARGET_LDFLAGS="${TARGET_LDFLAGS:-}"
+TARGET_PYTHON_CONFIGURE_OPTS="${TARGET_PYTHON_CONFIGURE_OPTS:-}"
 
 export PYENV_ROOT
 export PYTHON_VERSION
 export TARGET_ID
 export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/plugins/python-build/bin:$PATH"
+
+append_env_value() {
+  local name="$1"
+  local addition="$2"
+  local current
+
+  if [[ -z "$addition" ]]; then
+    return
+  fi
+
+  current="${!name:-}"
+  if [[ -n "$current" ]]; then
+    printf -v "$name" '%s %s' "$current" "$addition"
+  else
+    printf -v "$name" '%s' "$addition"
+  fi
+  export "$name"
+}
+
+apply_target_build_settings() {
+  append_env_value CFLAGS "$TARGET_CFLAGS"
+  append_env_value CXXFLAGS "$TARGET_CXXFLAGS"
+  append_env_value LDFLAGS "$TARGET_LDFLAGS"
+  append_env_value PYTHON_CONFIGURE_OPTS "$TARGET_PYTHON_CONFIGURE_OPTS"
+}
+
+check_target_cpu_flags() {
+  local flags
+  local flag
+  local missing=""
+
+  if [[ -z "$TARGET_REQUIRED_CPU_FLAGS" ]]; then
+    return
+  fi
+
+  if [[ "$(uname -s)" != Linux ]]; then
+    echo "Target ${TARGET_ID} declares CPU flags but this runner is not Linux" >&2
+    exit 1
+  fi
+
+  if [[ ! -r /proc/cpuinfo ]]; then
+    echo "Cannot verify CPU flags for ${TARGET_ID}: /proc/cpuinfo is not readable" >&2
+    exit 1
+  fi
+
+  flags="$(awk -F: '/^flags[[:space:]]*:/{print $2; exit}' /proc/cpuinfo)"
+  if [[ -z "$flags" ]]; then
+    echo "Cannot verify CPU flags for ${TARGET_ID}: no flags line in /proc/cpuinfo" >&2
+    exit 1
+  fi
+
+  for flag in $TARGET_REQUIRED_CPU_FLAGS; do
+    if [[ " $flags " != *" $flag "* ]]; then
+      missing="${missing:+$missing }$flag"
+    fi
+  done
+
+  if [[ -n "$missing" ]]; then
+    echo "Runner CPU is not compatible with target ${TARGET_ID}" >&2
+    if [[ -n "$TARGET_CPU_TARGET" ]]; then
+      echo "CPU target: ${TARGET_CPU_TARGET}" >&2
+    fi
+    echo "Missing CPU flags: ${missing}" >&2
+    echo "Required CPU flags: ${TARGET_REQUIRED_CPU_FLAGS}" >&2
+    exit 1
+  fi
+}
+
+apply_target_build_settings
+check_target_cpu_flags
 
 if ! command -v pyenv >/dev/null 2>&1; then
   echo "pyenv is required in CI but was not found on PATH" >&2
@@ -158,6 +234,8 @@ export BUILT_AT
 export PYENV_VERSION_TEXT
 export PYTHON_BUILD_VERSION_TEXT
 export RELOCATION_LIBRARY_PATH
+export TARGET_CPU_TARGET
+export TARGET_REQUIRED_CPU_FLAGS
 export TARGET_RUNNER
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 PYENV_VERSION_TEXT="$(pyenv --version 2>/dev/null || true)"
@@ -177,6 +255,15 @@ build_info = {
     "pyenv_version": os.environ.get("PYENV_VERSION_TEXT") or None,
     "python_build_version": os.environ.get("PYTHON_BUILD_VERSION_TEXT") or None,
     "configure_flags": os.environ.get("PYTHON_CONFIGURE_OPTS") or None,
+    "compiler_flags": {
+        "cflags": os.environ.get("CFLAGS") or None,
+        "cxxflags": os.environ.get("CXXFLAGS") or None,
+        "ldflags": os.environ.get("LDFLAGS") or None,
+    },
+    "cpu_target": os.environ.get("TARGET_CPU_TARGET") or None,
+    "required_cpu_flags": (
+        os.environ.get("TARGET_REQUIRED_CPU_FLAGS", "").split() or None
+    ),
     "relocation": {
         "status": "passed",
         "library_path": os.environ["RELOCATION_LIBRARY_PATH"],

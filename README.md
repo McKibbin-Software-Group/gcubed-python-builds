@@ -42,13 +42,39 @@ Current platforms:
 
 ```text
 linux-x86_64-glibc
+linux-x86_64-icelake-glibc
 linux-arm64-glibc
 macos-arm64
 ```
 
 Linux x86_64 archives are built for glibc on GitHub `ubuntu-22.04` runners.
-Linux arm64 archives are built for glibc on GitHub `ubuntu-22.04-arm`
-runners. macOS ARM archives are built on GitHub `macos-14` runners.
+The `linux-x86_64-glibc` platform is the generic x86_64 build. The
+`linux-x86_64-icelake-glibc` platform is an Intel Ice Lake Server build for
+hosts compatible with processors such as Intel Xeon Platinum 8358 and Intel
+Xeon Gold 6354. Linux arm64 archives are built for glibc on GitHub
+`ubuntu-22.04-arm` runners. macOS ARM archives are built on GitHub `macos-14`
+runners.
+
+## Intel Ice Lake Builds
+
+The `linux-x86_64-icelake-glibc` target compiles CPython with:
+
+```sh
+CFLAGS="-O3 -march=icelake-server -mtune=icelake-server -fno-semantic-interposition"
+CXXFLAGS="-O3 -march=icelake-server -mtune=icelake-server -fno-semantic-interposition"
+LDFLAGS="-Wl,-O1"
+PYTHON_CONFIGURE_OPTS="--enable-optimizations --with-lto"
+```
+
+The workflow checks the runner CPU before building because the optimized
+interpreter is used during CPython's PGO build and validation steps. On
+GitHub-hosted runners this target may fail early if the host CPU does not expose
+the required Ice Lake instruction flags.
+
+This target only optimizes CPython itself. NumPy and SciPy need separately
+optimized wheels or source builds, including appropriate BLAS/LAPACK choices, to
+fully use the same processor capabilities for linear algebra and large matrix
+operations.
 
 ## Adding A Python Version
 
@@ -157,7 +183,9 @@ target manifest file.
 To run the build scripts locally, install `pyenv` first and provide the same
 environment variables used by CI. `PYENV_ROOT` can be any writable build
 location; packaged archives are validated after extraction to a different
-temporary path.
+temporary path. Use a separate `PYENV_ROOT` when building different target
+variants of the same CPython version locally so `pyenv install --skip-existing`
+does not reuse a build compiled with different flags.
 
 ```sh
 export PYENV_ROOT="$HOME/.pyenv"
